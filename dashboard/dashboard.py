@@ -13,21 +13,22 @@ file_path = os.path.join(current_dir, "main_data.csv")
 
 @st.cache_data
 def load_data(path):
-    # Membaca file
+    # Membaca file dengan deteksi separator otomatis
     data = pd.read_csv(path, sep=None, engine='python')
     data.columns = data.columns.str.strip().str.lower()
     
-    # Konversi tanggal dan bersihkan baris kosong
+    # Konversi tanggal dan pastikan tidak ada baris kosong pada kolom tanggal
     if 'order_purchase_timestamp' in data.columns:
         data['order_purchase_timestamp'] = pd.to_datetime(data['order_purchase_timestamp'], errors='coerce')
+        # Hapus baris yang gagal jadi tanggal (NaT) agar filter tidak pecah
         data = data.dropna(subset=['order_purchase_timestamp'])
     return data
 
 # Jalankan Load Data
-df = load_data(file_path) if os.path.exists(file_path) else None
-
-if df is None:
-    st.error("File tidak ditemukan!")
+if os.path.exists(file_path):
+    df = load_data(file_path)
+else:
+    st.error("File main_data.csv tidak ditemukan!")
     st.stop()
 
 # --- SIDEBAR ---
@@ -35,6 +36,7 @@ with st.sidebar:
     st.image("https://github.com/dicodingacademy/assets/raw/main/logo.png")
     st.header("Filter Dashboard")
     
+    # Ambil batas tanggal
     min_date = df['order_purchase_timestamp'].min().date()
     max_date = df['order_purchase_timestamp'].max().date()
     
@@ -45,25 +47,22 @@ with st.sidebar:
         value=[min_date, max_date]
     )
 
-    selected_states = st.multiselect("Pilih Negara Bagian", 
-                                     options=sorted(df['customer_state'].unique()), 
-                                     default=df['customer_state'].unique())
+    # Filter State & Kategori
+    selected_states = st.multiselect("Negara Bagian", options=sorted(df['customer_state'].unique()), default=df['customer_state'].unique())
+    selected_categories = st.multiselect("Kategori Produk", options=sorted(df['product_category_name_english'].dropna().unique()), default=df['product_category_name_english'].dropna().unique()[:10])
 
-    selected_categories = st.multiselect("Pilih Kategori", 
-                                         options=sorted(df['product_category_name_english'].dropna().unique()), 
-                                         default=df['product_category_name_english'].dropna().unique()[:10])
-
-# --- LOGIKA FILTERING (METODE MASKING TUNGGAL) ---
+# --- LOGIKA FILTERING (TEKNIK SINGLE MASKING) ---
 if isinstance(date_range, list) and len(date_range) == 2:
     start_date, end_date = date_range
 else:
     start_date = end_date = (date_range[0] if isinstance(date_range, list) else date_range)
 
-# Samakan format untuk perbandingan
+# Samakan format filter dengan format kolom
 start_dt = pd.to_datetime(start_date)
 end_dt = pd.to_datetime(end_date) + pd.Timedelta(hours=23, minutes=59, seconds=59)
 
-# KUNCI: Kita buat saringan (mask) langsung dari df utama
+# KUNCI PERBAIKAN: Hitung mask (saringan) satu kali langsung dari dataframe asli 'df'
+# Ini menjamin panjang data selalu cocok (match)
 mask = (
     (df["order_purchase_timestamp"] >= start_dt) & 
     (df["order_purchase_timestamp"] <= end_dt) &
@@ -71,17 +70,17 @@ mask = (
     (df["product_category_name_english"].isin(selected_categories))
 )
 
-# Buat dataframe baru untuk visualisasi
+# Terapkan saringan ke df asli untuk membuat main_df
 main_df = df.loc[mask].copy()
 
 # --- TAMPILAN UTAMA ---
 st.title('Analisis Performa E-Commerce Olist 📊')
 
-# Menampilkan statistik baris data agar Anda yakin data tidak hilang
-st.write(f"Total data di file: **{len(df)}** | Data setelah difilter: **{len(main_df)}**")
+# Tampilkan info data untuk memastikan integritas
+st.write(f"Total baris di file: **{len(df)}** | Baris setelah difilter: **{len(main_df)}**")
 
 if not main_df.empty:
-    # METRICS
+    # 1. METRICS
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Total Orders", value=main_df['order_id'].nunique())
@@ -92,7 +91,7 @@ if not main_df.empty:
 
     st.divider()
 
-    # CHARTS
+    # 2. VISUALISASI
     c1, c2 = st.columns(2)
     with c1:
         st.subheader("Top Categories")
@@ -108,6 +107,6 @@ if not main_df.empty:
         sns.barplot(x="order_id", y="customer_state", data=state_df, palette="magma", ax=ax)
         st.pyplot(fig)
 else:
-    st.warning("Data kosong untuk filter yang dipilih.")
+    st.warning("⚠️ Data tidak ditemukan. Silakan atur kembali filter di samping.")
 
-st.caption('Copyright (c) 2025 - Olist Analysis')
+st.caption('Copyright (c) 2025 - Dashboard Analysis')
