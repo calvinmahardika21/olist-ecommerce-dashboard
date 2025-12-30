@@ -13,12 +13,16 @@ file_path = os.path.join(current_dir, "main_data.csv")
 
 @st.cache_data
 def load_data(path):
-    # Menggunakan sep=None dan engine python agar otomatis mendeteksi koma/titik koma
+    # Membaca file dengan deteksi separator otomatis
     data = pd.read_csv(path, sep=None, engine='python')
-    # Menghapus spasi gaib pada nama kolom
-    data.columns = data.columns.str.strip()
-    # Mengonversi waktu
-    data['order_purchase_timestamp'] = pd.to_datetime(data['order_purchase_timestamp'])
+    
+    # Memastikan tidak ada spasi di awal/akhir nama kolom dan paksa huruf kecil
+    data.columns = data.columns.str.strip().str.lower()
+    
+    # Konversi kolom waktu (pastikan namanya sesuai di CSV, misal order_purchase_timestamp)
+    if 'order_purchase_timestamp' in data.columns:
+        data['order_purchase_timestamp'] = pd.to_datetime(data['order_purchase_timestamp'])
+    
     return data
 
 # Cek apakah file ada
