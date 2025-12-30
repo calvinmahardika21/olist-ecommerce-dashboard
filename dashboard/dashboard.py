@@ -17,11 +17,13 @@ def load_data(path):
     data = pd.read_csv(path, sep=None, engine='python')
     data.columns = data.columns.str.strip().str.lower()
     
-    # Konversi tanggal dan pastikan tidak ada baris kosong pada kolom tanggal
+    # Konversi tanggal dan hapus baris yang rusak
     if 'order_purchase_timestamp' in data.columns:
         data['order_purchase_timestamp'] = pd.to_datetime(data['order_purchase_timestamp'], errors='coerce')
-        # Hapus baris yang gagal jadi tanggal (NaT) agar filter tidak pecah
         data = data.dropna(subset=['order_purchase_timestamp'])
+    
+    # Reset index agar sinkron (Mencegah Length Mismatch)
+    data = data.reset_index(drop=True)
     return data
 
 # Jalankan Load Data
@@ -36,7 +38,6 @@ with st.sidebar:
     st.image("https://github.com/dicodingacademy/assets/raw/main/logo.png")
     st.header("Filter Dashboard")
     
-    # Ambil batas tanggal
     min_date = df['order_purchase_timestamp'].min().date()
     max_date = df['order_purchase_timestamp'].max().date()
     
@@ -47,22 +48,19 @@ with st.sidebar:
         value=[min_date, max_date]
     )
 
-    # Filter State & Kategori
-    selected_states = st.multiselect("Negara Bagian", options=sorted(df['customer_state'].unique()), default=df['customer_state'].unique())
-    selected_categories = st.multiselect("Kategori Produk", options=sorted(df['product_category_name_english'].dropna().unique()), default=df['product_category_name_english'].dropna().unique()[:10])
+    selected_states = st.multiselect("Pilih Negara Bagian", options=sorted(df['customer_state'].unique()), default=df['customer_state'].unique())
+    selected_categories = st.multiselect("Pilih Kategori", options=sorted(df['product_category_name_english'].dropna().unique()), default=df['product_category_name_english'].dropna().unique()[:10])
 
-# --- LOGIKA FILTERING (TEKNIK SINGLE MASKING) ---
+# --- LOGIKA FILTERING (TEKNIK SINGLE-PASS) ---
 if isinstance(date_range, list) and len(date_range) == 2:
     start_date, end_date = date_range
 else:
     start_date = end_date = (date_range[0] if isinstance(date_range, list) else date_range)
 
-# Samakan format filter dengan format kolom
 start_dt = pd.to_datetime(start_date)
 end_dt = pd.to_datetime(end_date) + pd.Timedelta(hours=23, minutes=59, seconds=59)
 
-# KUNCI PERBAIKAN: Hitung mask (saringan) satu kali langsung dari dataframe asli 'df'
-# Ini menjamin panjang data selalu cocok (match)
+# KUNCI: Membuat mask langsung dari dataframe 'df' yang sudah di-reset index-nya
 mask = (
     (df["order_purchase_timestamp"] >= start_dt) & 
     (df["order_purchase_timestamp"] <= end_dt) &
@@ -70,14 +68,12 @@ mask = (
     (df["product_category_name_english"].isin(selected_categories))
 )
 
-# Terapkan saringan ke df asli untuk membuat main_df
-main_df = df.loc[mask].copy()
+# Terapkan saringan
+main_df = df[mask].copy()
 
 # --- TAMPILAN UTAMA ---
 st.title('Analisis Performa E-Commerce Olist 📊')
-
-# Tampilkan info data untuk memastikan integritas
-st.write(f"Total baris di file: **{len(df)}** | Baris setelah difilter: **{len(main_df)}**")
+st.info(f"💡 Menampilkan **{len(main_df)}** baris data dari total **{len(df)}** baris.")
 
 if not main_df.empty:
     # 1. METRICS
@@ -107,6 +103,6 @@ if not main_df.empty:
         sns.barplot(x="order_id", y="customer_state", data=state_df, palette="magma", ax=ax)
         st.pyplot(fig)
 else:
-    st.warning("⚠️ Data tidak ditemukan. Silakan atur kembali filter di samping.")
+    st.warning("⚠️ Data tidak ditemukan untuk filter ini.")
 
-st.caption('Copyright (c) 2025 - Dashboard Analysis')
+st.caption('Copyright (c) 2025 - Olist Analysis')
