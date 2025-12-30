@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
 import os
-import datetime
 
 # --- KONFIGURASI HALAMAN ---
 st.set_page_config(layout="wide", page_title="Olist E-Commerce Dashboard")
@@ -36,21 +35,17 @@ with st.sidebar:
     st.image("https://github.com/dicodingacademy/assets/raw/main/logo.png")
     st.header("Filter Data")
     
-    # Ambil nilai min dan max dalam format datetime.date
+    # Ambil nilai min dan max dalam format date murni
     min_date = df['order_purchase_timestamp'].min().date()
     max_date = df['order_purchase_timestamp'].max().date()
     
     # Input rentang waktu
-    try:
-        date_range = st.date_input(
-            label='Rentang Waktu Analisis',
-            min_value=min_date,
-            max_value=max_date,
-            value=[min_date, max_date]
-        )
-    except Exception:
-        st.warning("Silakan pilih rentang tanggal yang lengkap.")
-        st.stop()
+    date_range = st.date_input(
+        label='Rentang Waktu Analisis',
+        min_value=min_date,
+        max_value=max_date,
+        value=[min_date, max_date]
+    )
 
     all_states = sorted(df['customer_state'].unique())
     selected_states = st.multiselect("Pilih Negara Bagian", options=all_states, default=all_states)
@@ -58,30 +53,30 @@ with st.sidebar:
     all_categories = sorted(df['product_category_name_english'].dropna().unique())
     selected_categories = st.multiselect("Pilih Kategori", options=all_categories, default=all_categories[:5])
 
-# --- LOGIKA FILTERING (KEBAL TYPEERROR) ---
-# Memastikan start_date dan end_date tersedia
+# --- LOGIKA FILTERING (VERSI ANTI-ERROR) ---
+# Memastikan start_date dan end_date tersedia dari range
 if isinstance(date_range, list) and len(date_range) == 2:
     start_date, end_date = date_range
 else:
     start_date = end_date = (date_range[0] if isinstance(date_range, list) else date_range)
 
-# Konversi filter ke format datetime untuk perbandingan yang stabil
+# KUNCI PERBAIKAN: Konversi filter user ke DATETIME agar sama dengan tipe kolom
 start_date = pd.to_datetime(start_date)
 end_date = pd.to_datetime(end_date)
 
-# Proses filtering dilakukan pada kolom datetime murni (bukan .dt.date)
+# Proses filtering menggunakan kolom datetime murni (TANPA .dt.date)
 main_df = df[
     (df["order_purchase_timestamp"] >= start_date) & 
     (df["order_purchase_timestamp"] <= end_date) &
     (df["product_category_name_english"].isin(selected_categories)) &
     (df["customer_state"].isin(selected_states))
-]
+].copy()
 
 # --- TAMPILAN UTAMA ---
 st.title('Analisis Performa E-Commerce Olist 📊')
 
-col1, col2, col3 = st.columns(3)
 if not main_df.empty:
+    col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Total Orders", value=main_df['order_id'].nunique())
     with col2:
@@ -106,6 +101,6 @@ if not main_df.empty:
         sns.barplot(x="order_id", y="customer_state", data=state_df, palette="magma", ax=ax)
         st.pyplot(fig)
 else:
-    st.warning("⚠️ Data tidak ditemukan untuk filter ini. Silakan ubah filter pada sidebar.")
+    st.warning("⚠️ Data tidak ditemukan. Coba perluas rentang tanggal atau pilih kategori lain.")
 
 st.caption('Copyright (c) 2025 - Dashboard Analysis')
