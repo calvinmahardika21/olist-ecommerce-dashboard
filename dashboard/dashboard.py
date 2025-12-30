@@ -13,22 +13,20 @@ file_path = os.path.join(current_dir, "main_data.csv")
 
 @st.cache_data
 def load_data(path):
-    # Membaca file dengan deteksi separator otomatis
+    # Membaca data dengan deteksi otomatis
     data = pd.read_csv(path, sep=None, engine='python')
     data.columns = data.columns.str.strip().str.lower()
     
-    # Konversi tanggal dan bersihkan baris yang benar-benar rusak
+    # Konversi tanggal dan pastikan index bersih
     if 'order_purchase_timestamp' in data.columns:
         data['order_purchase_timestamp'] = pd.to_datetime(data['order_purchase_timestamp'], errors='coerce')
         data = data.dropna(subset=['order_purchase_timestamp'])
     
-    # Reset index sangat penting agar panjang data sinkron saat filtering
-    data = data.reset_index(drop=True)
-    return data
+    return data.reset_index(drop=True)
 
 if os.path.exists(file_path):
-    # df_base adalah data master yang tidak boleh diganggu gugat
-    df_base = load_data(file_path)
+    # Kita gunakan df_all sebagai sumber data master yang tidak berubah
+    df_all = load_data(file_path)
 else:
     st.error("File main_data.csv tidak ditemukan!")
     st.stop()
@@ -36,10 +34,11 @@ else:
 # --- SIDEBAR ---
 with st.sidebar:
     st.image("https://github.com/dicodingacademy/assets/raw/main/logo.png")
-    st.header("Filter Dashboard")
+    st.header("Filter Data")
     
-    min_date = df_base['order_purchase_timestamp'].min().date()
-    max_date = df_base['order_purchase_timestamp'].max().date()
+    # Ambil batas tanggal
+    min_date = df_all['order_purchase_timestamp'].min().date()
+    max_date = df_all['order_purchase_timestamp'].max().date()
     
     date_range = st.date_input(
         label='Rentang Waktu',
@@ -48,52 +47,47 @@ with st.sidebar:
         value=[min_date, max_date]
     )
 
-    selected_states = st.multiselect(
-        "Pilih Negara Bagian", 
-        options=sorted(df_base['customer_state'].unique()), 
-        default=df_base['customer_state'].unique()
-    )
+    # Menyiapkan list untuk filter
+    all_states = sorted(df_all['customer_state'].unique())
+    selected_states = st.multiselect("Pilih Negara Bagian", options=all_states, default=all_states)
 
-    selected_categories = st.multiselect(
-        "Pilih Kategori", 
-        options=sorted(df_base['product_category_name_english'].dropna().unique()), 
-        default=df_base['product_category_name_english'].dropna().unique()[:10]
-    )
+    all_cats = sorted(df_all['product_category_name_english'].dropna().unique())
+    selected_categories = st.multiselect("Pilih Kategori", options=all_cats, default=all_cats[:10])
 
-# --- LOGIKA FILTERING (CARA PALING AMAN) ---
+# --- LOGIKA FILTERING (METODE QUERY - ANTI ERROR) ---
 if isinstance(date_range, list) and len(date_range) == 2:
     start_date, end_date = date_range
 else:
     start_date = end_date = (date_range[0] if isinstance(date_range, list) else date_range)
 
-# Konversi filter user ke format Timestamp
+# Ubah ke format datetime untuk filter
 start_dt = pd.to_datetime(start_date)
 end_dt = pd.to_datetime(end_date) + pd.Timedelta(hours=23, minutes=59, seconds=59)
 
-# KUNCI: Kita buat salinan filter (mask) berdasarkan df_base yang utuh
-# Ini menjamin panjang saringan (mask) sama persis dengan df_base
-mask = (
-    (df_base["order_purchase_timestamp"] >= start_dt) & 
-    (df_base["order_purchase_timestamp"] <= end_dt) &
-    (df_base["customer_state"].isin(selected_states)) &
-    (df_base["product_category_name_english"].isin(selected_categories))
-)
+# KUNCI: Gunakan .query() atau filter bertahap pada salinan lokal
+# Cara ini menjamin tidak ada 'length mismatch'
+main_df = df_all[
+    (df_all["order_purchase_timestamp"] >= start_dt) & 
+    (df_all["order_purchase_timestamp"] <= end_dt)
+].copy()
 
-# Terapkan saringan ke data master untuk menghasilkan data tampilan
-main_df = df_base[mask].reset_index(drop=True)
+main_df = main_df[main_df["customer_state"].isin(selected_states)]
+main_df = main_df[main_df["product_category_name_english"].isin(selected_categories)]
 
 # --- TAMPILAN UTAMA ---
 st.title('Analisis Performa E-Commerce Olist 📊')
-st.info(f"💡 Menampilkan **{len(main_df)}** baris data dari total **{len(df_base)}** baris.")
+
+# Menampilkan info baris untuk membuktikan data tidak hilang
+st.info(f"💡 Memuat **{len(main_df)}** baris data dari total **{len(df_all)}** baris master.")
 
 if not main_df.empty:
     # 1. METRICS
-    col1, col2, col3 = st.columns(3)
-    with col1:
+    m1, m2, m3 = st.columns(3)
+    with m1:
         st.metric("Total Orders", value=main_df['order_id'].nunique())
-    with col2:
+    with m2:
         st.metric("Total Revenue", value=f"R$ {main_df['price'].sum():,.2f}")
-    with col3:
+    with m3:
         st.metric("Total Customers", value=main_df['customer_id'].nunique())
 
     st.divider()
@@ -114,6 +108,6 @@ if not main_df.empty:
         sns.barplot(x="order_id", y="customer_state", data=state_df, palette="magma", ax=ax)
         st.pyplot(fig)
 else:
-    st.warning("⚠️ Data tidak ditemukan. Silakan atur kembali filter di sidebar.")
+    st.warning("Data tidak ditemukan. Silakan sesuaikan filter Anda.")
 
-st.caption('Copyright (c) 2025 - Olist Analysis')
+st.caption('Copyright (c) 2025 - Olist Analysis Dashboard')
