@@ -15,10 +15,10 @@ file_path = os.path.join(current_dir, "main_data.csv")
 def load_data(path):
     # Membaca file dengan deteksi separator otomatis
     data = pd.read_csv(path, sep=None, engine='python')
-    # Membersihkan nama kolom
+    # Membersihkan nama kolom (kecilkan & hapus spasi)
     data.columns = data.columns.str.strip().str.lower()
     
-    # Memaksa kolom waktu menjadi format datetime dan menghapus baris yang waktunya rusak
+    # Paksa kolom waktu menjadi format datetime dan buang data yang rusak
     if 'order_purchase_timestamp' in data.columns:
         data['order_purchase_timestamp'] = pd.to_datetime(data['order_purchase_timestamp'], errors='coerce')
         data = data.dropna(subset=['order_purchase_timestamp'])
@@ -29,7 +29,7 @@ def load_data(path):
 if os.path.exists(file_path):
     df = load_data(file_path)
 else:
-    st.error(f"File tidak ditemukan!")
+    st.error(f"File tidak ditemukan di: {file_path}")
     st.stop()
 
 # --- SIDEBAR (FITUR INTERAKTIF) ---
@@ -37,7 +37,7 @@ with st.sidebar:
     st.image("https://github.com/dicodingacademy/assets/raw/main/logo.png")
     st.header("Konfigurasi Filter")
     
-    # Ambil nilai min dan max tanggal yang sudah pasti dalam format date
+    # Pastikan min/max adalah objek date murni
     min_date = df['order_purchase_timestamp'].min().date()
     max_date = df['order_purchase_timestamp'].max().date()
     
@@ -57,14 +57,14 @@ with st.sidebar:
     all_categories = sorted(df['product_category_name_english'].dropna().unique())
     selected_categories = st.multiselect("Pilih Kategori", options=all_categories, default=all_categories[:10])
 
-# --- LOGIKA FILTERING (DIPERBAIKI) ---
-# Memastikan rentang tanggal terpilih dengan benar
+# --- LOGIKA FILTERING ---
 if isinstance(date_range, list) and len(date_range) == 2:
     start_date, end_date = date_range
 else:
+    # Jika user baru klik satu tanggal, samakan start dan end agar tidak error
     start_date = end_date = (date_range[0] if isinstance(date_range, list) else date_range)
 
-# Proses filtering
+# Proses filtering data
 main_df = df[
     (df["order_purchase_timestamp"].dt.date >= start_date) & 
     (df["order_purchase_timestamp"].dt.date <= end_date) &
@@ -86,7 +86,7 @@ if not main_df.empty:
     with col3:
         st.metric("Total Customers", value=main_df['customer_id'].nunique())
 else:
-    st.warning("Tidak ada data pada rentang waktu/filter ini.")
+    st.warning("⚠️ Tidak ada data untuk filter ini. Silakan atur ulang filter di sidebar.")
 
 st.divider()
 
@@ -99,7 +99,7 @@ with col_chart1:
         top_df = main_df.groupby("product_category_name_english")['price'].sum().sort_values(ascending=False).head(10).reset_index()
         fig, ax = plt.subplots(figsize=(10, 6))
         sns.barplot(x="price", y="product_category_name_english", data=top_df, palette="viridis", ax=ax)
-        ax.set_xlabel("Revenue")
+        ax.set_xlabel("Revenue (BRL)")
         ax.set_ylabel(None)
         st.pyplot(fig)
 
@@ -110,6 +110,7 @@ with col_chart2:
         fig, ax = plt.subplots(figsize=(10, 6))
         sns.barplot(x="order_id", y="customer_state", data=state_df, palette="magma", ax=ax)
         ax.set_xlabel("Number of Orders")
+        ax.set_ylabel("State")
         st.pyplot(fig)
 
 st.caption('Copyright (c) 2025 - Olist E-Commerce Analysis')
