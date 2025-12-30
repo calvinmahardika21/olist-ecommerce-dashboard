@@ -20,7 +20,7 @@ def load_data(path):
     # Konversi kolom waktu ke datetime murni
     if 'order_purchase_timestamp' in data.columns:
         data['order_purchase_timestamp'] = pd.to_datetime(data['order_purchase_timestamp'], errors='coerce')
-        # Hapus baris yang benar-benar tidak punya tanggal agar tidak error saat difilter
+        # Hapus baris yang gagal dikonversi jadi tanggal agar tidak bikin error filter
         data = data.dropna(subset=['order_purchase_timestamp'])
     return data
 
@@ -35,10 +35,11 @@ with st.sidebar:
     st.image("https://github.com/dicodingacademy/assets/raw/main/logo.png")
     st.header("Filter Data")
     
-    # Ambil nilai min dan max tanggal
+    # Ambil nilai min dan max tanggal murni dari data
     min_date = df['order_purchase_timestamp'].min().date()
     max_date = df['order_purchase_timestamp'].max().date()
     
+    # Input rentang waktu
     date_range = st.date_input(
         label='Rentang Waktu',
         min_value=min_date,
@@ -46,23 +47,26 @@ with st.sidebar:
         value=[min_date, max_date]
     )
 
+    # Filter Negara Bagian
     all_states = sorted(df['customer_state'].unique())
     selected_states = st.multiselect("Pilih Negara Bagian", options=all_states, default=all_states)
 
+    # Filter Kategori Produk
     all_categories = sorted(df['product_category_name_english'].dropna().unique())
     selected_categories = st.multiselect("Pilih Kategori", options=all_categories, default=all_categories[:10])
 
-# --- LOGIKA FILTERING (DIPERBAIKI) ---
+# --- LOGIKA FILTERING (DIPERBAIKI AGAR PANJANG DATA SAMA) ---
 if isinstance(date_range, list) and len(date_range) == 2:
     start_date, end_date = date_range
 else:
     start_date = end_date = (date_range[0] if isinstance(date_range, list) else date_range)
 
-# Konversi filter user ke datetime
+# Konversi filter ke datetime agar sebanding dengan kolom dataframe
 start_dt = pd.to_datetime(start_date)
 end_dt = pd.to_datetime(end_date) + pd.Timedelta(hours=23, minutes=59, seconds=59)
 
-# Lakukan filter sekaligus pada dataframe asli (df)
+# KUNCI PERBAIKAN: Lakukan satu kali filter pada dataframe asli 'df'
+# Ini mencegah "ValueError: Lengths must match"
 main_df = df[
     (df["order_purchase_timestamp"] >= start_dt) & 
     (df["order_purchase_timestamp"] <= end_dt) &
@@ -106,7 +110,9 @@ if not main_df.empty:
     st.divider()
     st.subheader("Best Customer Based on RFM Parameters")
     
+    # Recency dihitung dari tanggal terakhir di seluruh dataset
     recent_date = df['order_purchase_timestamp'].max() + pd.Timedelta(days=1)
+    
     rfm_df = main_df.groupby(by="customer_id", as_index=False).agg({
         "order_purchase_timestamp": lambda x: (recent_date - x.max()).days,
         "order_id": "nunique",
@@ -115,26 +121,27 @@ if not main_df.empty:
     rfm_df.columns = ["customer_id", "recency", "frequency", "monetary"]
     
     col_r1, col_r2, col_r3 = st.columns(3)
+    # Gunakan fungsi plotting yang lebih aman untuk Streamlit
     with col_r1:
         st.write("#### By Recency (Days)")
         fig, ax = plt.subplots()
         sns.barplot(y="recency", x="customer_id", data=rfm_df.sort_values("recency").head(5), palette="Reds", ax=ax)
-        ax.set_xticklabels([]) # Sembunyikan ID karena terlalu panjang
+        ax.set_xticks([]) # Sembunyikan ID karena terlalu panjang
         st.pyplot(fig)
     with col_r2:
         st.write("#### By Frequency")
         fig, ax = plt.subplots()
         sns.barplot(y="frequency", x="customer_id", data=rfm_df.sort_values("frequency", ascending=False).head(5), palette="Greens", ax=ax)
-        ax.set_xticklabels([])
+        ax.set_xticks([])
         st.pyplot(fig)
     with col_r3:
         st.write("#### By Monetary")
         fig, ax = plt.subplots()
         sns.barplot(y="monetary", x="customer_id", data=rfm_df.sort_values("monetary", ascending=False).head(5), palette="Blues", ax=ax)
-        ax.set_xticklabels([])
+        ax.set_xticks([])
         st.pyplot(fig)
 
 else:
-    st.warning("Data tidak ditemukan. Silakan atur ulang filter.")
+    st.warning("Data tidak ditemukan. Silakan atur ulang filter di sidebar.")
 
-st.caption('Copyright (c) 2025 - Olist Analysis')
+st.caption('Copyright (c) 2025 - Olist Analysis Dashboard')
