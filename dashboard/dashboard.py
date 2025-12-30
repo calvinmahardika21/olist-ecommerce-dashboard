@@ -13,15 +13,23 @@ file_path = os.path.join(current_dir, "main_data.csv")
 
 @st.cache_data
 def load_data(path):
-    # Baris ini yang diubah agar bisa membaca file dari Excel (koma atau titik koma)
+    # Menggunakan sep=None dan engine python agar otomatis mendeteksi koma/titik koma
     data = pd.read_csv(path, sep=None, engine='python')
-    
-    # Menghapus spasi gaib di nama kolom jika ada
+    # Menghapus spasi gaib pada nama kolom
     data.columns = data.columns.str.strip()
-    
     # Mengonversi waktu
     data['order_purchase_timestamp'] = pd.to_datetime(data['order_purchase_timestamp'])
     return data
+
+# Cek apakah file ada
+if os.path.exists(file_path):
+    df = load_data(file_path)
+else:
+    st.error(f"File tidak ditemukan di: {file_path}")
+    st.stop()
+
+# --- SISANYA TETAP SAMA SEPERTI KODE KAMU SEBELUMNYA ---
+# (Pastikan copy semua kode dari 'SIDEBAR' sampai 'COPYRIGHT' milikmu ke sini)
 
 # Cek apakah file ada
 if os.path.exists(file_path):
