@@ -13,7 +13,13 @@ file_path = os.path.join(current_dir, "main_data.csv")
 
 @st.cache_data
 def load_data(path):
-    data = pd.read_csv(path)
+    # Baris ini yang diubah agar bisa membaca file dari Excel (koma atau titik koma)
+    data = pd.read_csv(path, sep=None, engine='python')
+    
+    # Menghapus spasi gaib di nama kolom jika ada
+    data.columns = data.columns.str.strip()
+    
+    # Mengonversi waktu
     data['order_purchase_timestamp'] = pd.to_datetime(data['order_purchase_timestamp'])
     return data
 
